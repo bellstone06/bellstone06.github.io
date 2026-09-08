@@ -118,26 +118,22 @@
 
         // 4. Inisiasi Mode Direct API (Otomatis & Tanpa Tombol Start)
         const html5QrCode = new Html5Qrcode("reader");
-        let isProcessing = false; // Flag untuk mencegah double scan
+        let isProcessing = false; 
 
         function onScanSuccess(decodedText, decodedResult) {
-            if (isProcessing) return; // Jika sedang memproses data, abaikan pindaian baru
+            if (isProcessing) return; 
             isProcessing = true;
             
-            // Berhentikan kamera sebentar secara visual
             try { html5QrCode.pause(); } catch (err) {}
-            
-            playBeep(); // Bunyikan suara
+            playBeep();
 
             try {
-                // Parsing Data JSON dari QR Code
                 const data = JSON.parse(decodedText);
                 
                 if (!data.nama || !data.nis || !data.kelas) throw new Error("Format tidak lengkap");
 
                 showStatus('loading', 'Menyimpan Data...', `${data.nama}`);
 
-                // Kirim data ke Google Sheets
                 fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify({ aksi: 'absen', ...data })
@@ -147,7 +143,7 @@
                     if (res.status === 'success') {
                         showStatus('success', 'Berhasil Absen!', `${data.nama}\n(${data.kelas})`);
                     } else {
-                        // Tampilkan pesan "Siswa sudah absen hari ini!" dari server
+                        // Menampilkan pesan penolakan dari server (Siswa sudah absen hari ini!)
                         showStatus('error', 'Akses Ditolak', res.message);
                     }
                 })
@@ -157,8 +153,8 @@
                 .finally(() => {
                     setTimeout(() => {
                         hideStatus();
-                        try { html5QrCode.resume(); } catch (err) {} // Lanjutkan kamera
-                        isProcessing = false; // Buka kunci pemindai untuk siswa selanjutnya
+                        try { html5QrCode.resume(); } catch (err) {} 
+                        isProcessing = false; 
                     }, 2500);
                 });
 
@@ -172,7 +168,6 @@
             }
         }
 
-        // Setelan Presisi Pemindai
         const scanConfig = { 
             fps: 10, 
             qrbox: function(viewfinderWidth, viewfinderHeight) {
@@ -184,12 +179,9 @@
         };
 
         // JALANKAN KAMERA OTOMATIS
-        // Prioritas Pertama: Coba Kamera Belakang ("environment")
         html5QrCode.start({ facingMode: "environment" }, scanConfig, onScanSuccess)
         .catch(err => {
             console.warn("Kamera belakang tidak ditemukan, mencoba kamera depan...");
-            
-            // Prioritas Kedua (Fallback): Coba Kamera Depan / Webcam PC ("user")
             html5QrCode.start({ facingMode: "user" }, scanConfig, onScanSuccess)
             .catch(err2 => {
                 console.error("Tidak ada kamera yang bisa diakses.", err2);
