@@ -16,7 +16,6 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #0f172a; } /* Slate 900 */
         
-        /* Hilangkan elemen tak perlu agar UI bersih */
         #reader { border: none !important; border-radius: 1rem; overflow: hidden; }
         #reader video { object-fit: cover; }
     </style>
@@ -73,8 +72,8 @@
             document.getElementById('clockWidget').innerText = new Date().toLocaleTimeString('id-ID');
         }, 1000);
 
-        // 2. Fungsi Suara "Beep" Sintetis
-        function playBeep() {
+        // 2. Fungsi Suara "Beep" & "Error" Sintetis
+        function playBeep(isError = false) {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
@@ -83,12 +82,17 @@
             gainNode.connect(audioCtx.destination);
             
             oscillator.type = 'sine';
-            oscillator.frequency.value = 850; 
+            if (isError) {
+                oscillator.frequency.value = 300; // Nada rendah untuk error
+            } else {
+                oscillator.frequency.value = 850; // Nada tinggi untuk sukses
+            }
+            
             gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1); 
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15); 
             
             oscillator.start(audioCtx.currentTime);
-            oscillator.stop(audioCtx.currentTime + 0.1);
+            oscillator.stop(audioCtx.currentTime + 0.15);
         }
 
         // 3. Fungsi Kontrol UI Notifikasi
@@ -116,7 +120,7 @@
             statusBox.classList.add('opacity-0', 'pointer-events-none');
         }
 
-        // 4. Inisiasi Mode Direct API (Otomatis & Tanpa Tombol Start)
+        // 4. Inisiasi Mode Direct API
         const html5QrCode = new Html5Qrcode("reader");
         let isProcessing = false; 
 
@@ -125,15 +129,32 @@
             isProcessing = true;
             
             try { html5QrCode.pause(); } catch (err) {}
-            playBeep();
 
             try {
                 const data = JSON.parse(decodedText);
-                
                 if (!data.nama || !data.nis || !data.kelas) throw new Error("Format tidak lengkap");
 
+                const nisString = data.nis.toString().trim();
+                const todayStr = new Date().toLocaleDateString('id-ID'); // Format lokal tanggal "DD/MM/YYYY"
+
+                // === PENGAMANAN LOKAL (CLIENT-SIDE MEMORY) ===
+                // Cek apakah perangkat ini sudah mencatat NIS tersebut hari ini di memori browser
+                const lastAbsenDate = localStorage.getItem(`absen_${nisString}`);
+                if (lastAbsenDate === todayStr) {
+                    playBeep(true); // Bunyi error
+                    showStatus('error', 'Akses Ditolak', `${data.nama}\nSudah absen hari ini!`);
+                    setTimeout(() => {
+                        hideStatus();
+                        try { html5QrCode.resume(); } catch (err) {}
+                        isProcessing = false;
+                    }, 2500);
+                    return; // Hentikan proses, jangan kirim fetch ke server
+                }
+
+                playBeep(false); // Bunyi sukses
                 showStatus('loading', 'Menyimpan Data...', `${data.nama}`);
 
+                // Kirim ke Server Google Sheets
                 fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify({ aksi: 'absen', ...data })
@@ -141,13 +162,16 @@
                 .then(response => response.json())
                 .then(res => {
                     if (res.status === 'success') {
+                        // Simpan memori lokal bahwa NIS ini sudah absen hari ini
+                        localStorage.setItem(`absen_${nisString}`, todayStr);
                         showStatus('success', 'Berhasil Absen!', `${data.nama}\n(${data.kelas})`);
                     } else {
-                        // Menampilkan pesan penolakan dari server (Siswa sudah absen hari ini!)
+                        playBeep(true);
                         showStatus('error', 'Akses Ditolak', res.message);
                     }
                 })
                 .catch(err => {
+                    playBeep(true);
                     showStatus('error', 'Koneksi Terputus', 'Cek koneksi internet Anda.');
                 })
                 .finally(() => {
@@ -159,6 +183,7 @@
                 });
 
             } catch (e) {
+                playBeep(true);
                 showStatus('error', 'QR Code Ditolak', 'QR Code tidak terdaftar / format salah.');
                 setTimeout(() => {
                     hideStatus();
@@ -178,17 +203,14 @@
             aspectRatio: 1.0 
         };
 
-        // JALANKAN KAMERA OTOMATIS
+        // Jalankan Kamera
         html5QrCode.start({ facingMode: "environment" }, scanConfig, onScanSuccess)
         .catch(err => {
-            console.warn("Kamera belakang tidak ditemukan, mencoba kamera depan...");
             html5QrCode.start({ facingMode: "user" }, scanConfig, onScanSuccess)
             .catch(err2 => {
-                console.error("Tidak ada kamera yang bisa diakses.", err2);
                 showStatus('error', 'Kamera Diblokir', 'Pastikan izin kamera diberikan di pengaturan browser.');
             });
         });
-
     </script>
 </body>
 </html>
