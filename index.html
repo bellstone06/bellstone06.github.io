@@ -1,45 +1,192 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SMART CBT</title>
-  <link rel="icon" href="https://i.imgur.com/ulfzoha.png" />
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #eee;
-      overflow: hidden; /* Mencegah scroll ganda */
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Absensi Sekolah</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HTML5 QR Code Library -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
 
-    .iframe-container {
-      width: 100%;
-      height: 100dvh; /* Menggunakan dvh agar pas di mobile browser */
-      overflow: hidden;
-    }
-
-    iframe {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-  </style>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; } /* Slate 900 */
+        
+        /* Modifikasi UI dari Library html5-qrcode bawaan agar lebih rapi */
+        #reader { border: none !important; }
+        #reader__dashboard_section_csr span { color: white !important; }
+        #reader__dashboard_section_swaplink { color: #60a5fa !important; text-decoration: none; margin-top: 10px; display: inline-block; }
+        #reader button { 
+            background-color: #4f46e5; color: white; border: none; padding: 8px 16px; 
+            border-radius: 8px; font-weight: 600; cursor: pointer; margin: 5px;
+        }
+    </style>
 </head>
-<body>
-  <div class="iframe-container">
-    <iframe
-      id="app"
-      src="https://script.google.com/macros/s/AKfycbyQKksEX3TKX8NMjYUKiXb0pbn113SPL-t1K7-2mIp7e6-OoPbPQlF6nQFnjGMHhlippA/exec"
-      scrolling="yes"
-      allowfullscreen="true"
-      webkitallowfullscreen="true"
-      mozallowfullscreen="true"
-      allow="fullscreen; camera; microphone; display-capture; geolocation;">
-    </iframe>
-  </div>
+<body class="flex flex-col items-center justify-center min-h-screen text-slate-200">
+
+    <!-- Header (Jam & Judul) -->
+    <div class="text-center mb-6">
+        <h1 class="text-4xl font-extrabold text-white tracking-tight mb-2">Portal Absensi</h1>
+        <p class="text-slate-400 text-lg">Arahkan QR Code Kartu Pelajar Anda ke Kamera</p>
+        <div id="clockWidget" class="text-3xl font-bold text-indigo-400 mt-4 bg-slate-800/50 inline-block px-6 py-2 rounded-full border border-slate-700/50 shadow-inner">
+            --:--:--
+        </div>
+    </div>
+
+    <!-- Scanner Card -->
+    <div class="bg-slate-800 p-4 rounded-3xl shadow-2xl shadow-indigo-500/10 w-full max-w-md border border-slate-700 relative overflow-hidden">
+        
+        <!-- Wadah Kamera -->
+        <div class="bg-black rounded-2xl overflow-hidden relative border-4 border-slate-700">
+            <div id="reader" class="w-full"></div>
+            <!-- Sudut Target Pemindai -->
+            <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div class="w-48 h-48 border-2 border-indigo-500/50 rounded-2xl relative">
+                    <div class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-indigo-400 rounded-tl-xl"></div>
+                    <div class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-indigo-400 rounded-tr-xl"></div>
+                    <div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-indigo-400 rounded-bl-xl"></div>
+                    <div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-indigo-400 rounded-br-xl"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifikasi Status (Hidden by default) -->
+        <div id="statusBox" class="absolute inset-0 bg-slate-900/95 flex flex-col items-center justify-center z-10 transition-opacity duration-300 opacity-0 pointer-events-none">
+            <i id="statusIcon" class="fa-solid fa-spinner fa-spin text-6xl mb-4 text-indigo-500"></i>
+            <h2 id="statusTitle" class="text-2xl font-bold text-white mb-1">Memproses...</h2>
+            <p id="statusDesc" class="text-slate-300 text-center px-6">Mohon tunggu sebentar</p>
+        </div>
+    </div>
+    
+    <div class="mt-8 text-slate-500 text-sm flex items-center gap-2">
+        <i class="fa-solid fa-shield-halved"></i> Data diproses secara aman dan real-time
+    </div>
+
+    <script>
+        // URL WEB APP APPS SCRIPT ANDA
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKVk3apqIkVMzvD4bTqZ7OCRLCLuPt4dg3h5Nfyx6v9DUMnECNTgB-i3ClIcsfKCw_mQ/exec';
+
+        // 1. Inisialisasi Jam Digital
+        setInterval(() => {
+            document.getElementById('clockWidget').innerText = new Date().toLocaleTimeString('id-ID');
+        }, 1000);
+
+        // 2. Fungsi Suara "Beep" Sintetis (Tanpa MP3 Eksternal)
+        function playBeep() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 850; // Nada tinggi (850Hz)
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1); // Durasi 0.1 detik
+            
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // 3. Fungsi Kontrol UI Notifikasi
+        const statusBox = document.getElementById('statusBox');
+        const statusIcon = document.getElementById('statusIcon');
+        const statusTitle = document.getElementById('statusTitle');
+        const statusDesc = document.getElementById('statusDesc');
+
+        function showStatus(type, title, desc) {
+            statusBox.classList.remove('opacity-0', 'pointer-events-none');
+            
+            if (type === 'loading') {
+                statusIcon.className = "fa-solid fa-circle-notch fa-spin text-5xl mb-4 text-indigo-400";
+            } else if (type === 'success') {
+                statusIcon.className = "fa-solid fa-circle-check text-6xl mb-4 text-emerald-400";
+            } else if (type === 'error') {
+                statusIcon.className = "fa-solid fa-triangle-exclamation text-6xl mb-4 text-rose-500";
+            }
+            
+            statusTitle.innerText = title;
+            statusDesc.innerText = desc;
+        }
+
+        function hideStatus() {
+            statusBox.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+       // 4. Konfigurasi Scanner yang Dioptimalkan
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 10, // Turunkan ke 10 agar kamera sempat melakukan Autofocus
+                qrbox: function(viewfinderWidth, viewfinderHeight) {
+                    // Buat area sensitif QR otomatis 70% dari ukuran layar/kamera
+                    let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+                    let qrboxSize = Math.floor(minEdgeSize * 0.7);
+                    return { width: qrboxSize, height: qrboxSize };
+                },
+                aspectRatio: 1.0,
+                disableFlip: false 
+            }, 
+            false
+        );
+        
+        function onScanSuccess(decodedText, decodedResult) {
+            // Hentikan scan sementara agar tidak dobel input
+            html5QrcodeScanner.pause(true); 
+            playBeep(); // Bunyikan suara beep
+
+            try {
+                // Parsing Data JSON dari QR Code
+                const data = JSON.parse(decodedText);
+                
+                // Pastikan formatnya benar (Ada NIS, Nama, Kelas)
+                if (!data.nama || !data.nis || !data.kelas) throw new Error("Format tidak lengkap");
+
+                // Tampilkan UI Loading
+                showStatus('loading', 'Menyimpan Data...', `${data.nama}`);
+
+                // Kirim data ke Google Sheets
+                fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ aksi: 'absen', ...data })
+                })
+                .then(response => response.json())
+                .then(res => {
+                    if (res.status === 'success') {
+                        // Tampilkan UI Sukses
+                        showStatus('success', 'Berhasil Absen!', `${data.nama}\n(${data.kelas})`);
+                    } else {
+                        showStatus('error', 'Gagal Menyimpan', 'Terjadi kesalahan sistem.');
+                    }
+                })
+                .catch(err => {
+                    showStatus('error', 'Koneksi Terputus', 'Cek koneksi internet Anda.');
+                })
+                .finally(() => {
+                    // Tunggu 2.5 detik, lalu hilangkan notifikasi dan nyalakan scanner kembali
+                    setTimeout(() => {
+                        hideStatus();
+                        html5QrcodeScanner.resume();
+                    }, 2500);
+                });
+
+            } catch (e) {
+                // Jika QR Code yang discan bukan milik sekolah (Format Salah)
+                showStatus('error', 'QR Code Ditolak', 'QR Code tidak terdaftar / format salah.');
+                setTimeout(() => {
+                    hideStatus();
+                    html5QrcodeScanner.resume();
+                }, 2500);
+            }
+        }
+
+        // Mulai jalankan kamera
+        html5QrcodeScanner.render(onScanSuccess);
+    </script>
 </body>
 </html>
