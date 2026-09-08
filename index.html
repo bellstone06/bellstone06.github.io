@@ -23,9 +23,7 @@
         #reader button { 
             background-color: #4f46e5; color: white; border: none; padding: 8px 16px; 
             border-radius: 8px; font-weight: 600; cursor: pointer; margin: 5px;
-            transition: background-color 0.2s;
         }
-        #reader button:hover { background-color: #4338ca; }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen text-slate-200">
@@ -120,11 +118,11 @@
             statusBox.classList.add('opacity-0', 'pointer-events-none');
         }
 
-        // 4. Konfigurasi dan Inisialisasi Scanner
+       // 4. Konfigurasi Scanner yang Dioptimalkan
         const html5QrcodeScanner = new Html5QrcodeScanner(
             "reader", 
             { 
-                fps: 10, // Frame per second (10 cukup agar auto-focus optimal)
+                fps: 10, // Turunkan ke 10 agar kamera sempat melakukan Autofocus
                 qrbox: function(viewfinderWidth, viewfinderHeight) {
                     // Buat area sensitif QR otomatis 70% dari ukuran layar/kamera
                     let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
@@ -132,15 +130,13 @@
                     return { width: qrboxSize, height: qrboxSize };
                 },
                 aspectRatio: 1.0,
-                disableFlip: false,
-                // Baris ini memaksa penggunaan kamera belakang jika tersedia (HP/Tablet)
-                videoConstraints: { facingMode: "environment" } 
+                disableFlip: false 
             }, 
             false
         );
         
         function onScanSuccess(decodedText, decodedResult) {
-            // Hentikan scan sementara agar tidak dobel input saat masih memproses data
+            // Hentikan scan sementara agar tidak dobel input
             html5QrcodeScanner.pause(true); 
             playBeep(); // Bunyikan suara beep
 
@@ -154,7 +150,7 @@
                 // Tampilkan UI Loading
                 showStatus('loading', 'Menyimpan Data...', `${data.nama}`);
 
-                // Kirim data ke Google Sheets melalui URL_WEB_APP
+                // Kirim data ke Google Sheets
                 fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify({ aksi: 'absen', ...data })
@@ -164,8 +160,9 @@
                     if (res.status === 'success') {
                         // Tampilkan UI Sukses
                         showStatus('success', 'Berhasil Absen!', `${data.nama}\n(${data.kelas})`);
-                    } else {
-                        showStatus('error', 'Gagal Menyimpan', 'Terjadi kesalahan sistem.');
+} else {
+                        // Tampilkan pesan penolakan dari Google Apps Script
+                        showStatus('error', 'Akses Ditolak', res.message);
                     }
                 })
                 .catch(err => {
@@ -180,7 +177,7 @@
                 });
 
             } catch (e) {
-                // Jika QR Code yang discan bukan milik sekolah (Format Bukan JSON / Salah)
+                // Jika QR Code yang discan bukan milik sekolah (Format Salah)
                 showStatus('error', 'QR Code Ditolak', 'QR Code tidak terdaftar / format salah.');
                 setTimeout(() => {
                     hideStatus();
@@ -189,7 +186,7 @@
             }
         }
 
-        // Mulai jalankan antarmuka kamera
+        // Mulai jalankan kamera
         html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
